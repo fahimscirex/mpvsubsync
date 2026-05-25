@@ -16,19 +16,40 @@ function self.file_exists(filepath)
 end
 
 function self.alt_dirs()
-    return {
+    local dirs = {
         '/opt/homebrew/bin',
         '/usr/local/bin',
-        utils.join_path(os.getenv("HOME") or "~", '.local/bin'),
     }
+    
+    local home = os.getenv("USERPROFILE") or os.getenv("HOME") or "~"
+    table.insert(dirs, utils.join_path(home, '.local/bin'))
+    table.insert(dirs, utils.join_path(home, '.cargo/bin'))
+    
+    local path_env = os.getenv("PATH")
+    if path_env then
+        local sep = (os.getenv("HOME") == nil) and ";" or ":"
+        for path in string.gmatch(path_env, "[^" .. sep .. "]+") do
+            table.insert(dirs, path)
+        end
+    end
+    
+    return dirs
 end
 
 function self.find_executable(name)
+    local is_windows = os.getenv("HOME") == nil
+    local names = { name }
+    if is_windows then
+        table.insert(names, name .. ".exe")
+    end
+
     local exec_path
-    for _, path in pairs(self.alt_dirs()) do
-        exec_path = utils.join_path(path, name)
-        if self.file_exists(exec_path) then
-            return exec_path
+    for _, n in ipairs(names) do
+        for _, path in pairs(self.alt_dirs()) do
+            exec_path = utils.join_path(path, n)
+            if self.file_exists(exec_path) then
+                return exec_path
+            end
         end
     end
     return name

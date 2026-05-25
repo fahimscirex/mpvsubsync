@@ -1,6 +1,6 @@
 # mpvsubsync
 
-Automatic subtitle synchronization for [mpv](https://mpv.io/) — match misaligned subtitles to audio using [`ffsubsync`](https://github.com/smacke/ffsubsync) or [`alass`](https://github.com/kaegi/alass).
+Automatic subtitle synchronization for [mpv](https://mpv.io/) — match misaligned subtitles to audio using [`ffsubsync`](https://github.com/smacke/ffsubsync) or [`alass`](https://github.com/kaegi/alass). Works with local files **and remote streaming URLs** (HTTP/HTTPS) — no need to download the video first.
 
 > Forked from [`joaquintorres/autosubsync-mpv`](https://github.com/joaquintorres/autosubsync-mpv) with substantial rework: async job manager, persistent cache, ASS progress bar, centered OSD menu, hardened parsers, and Windows/macOS support.
 
@@ -8,6 +8,7 @@ Automatic subtitle synchronization for [mpv](https://mpv.io/) — match misalign
 
 ## Features
 
+- **Works with remote streams** — sync subtitles against HTTP/HTTPS URLs and other network media without downloading the video. Audio is extracted directly from the stream and cached, with an optional fast-stream mode that samples a portion of the stream for quicker retiming.
 - **Two backends** — [ffsubsync](https://github.com/smacke/ffsubsync) (more accurate) or [alass](https://github.com/kaegi/alass) (faster). Pick per-mode, or be asked each time.
 - **Async job manager** — non-blocking subprocess execution with stop, restart, and reset controls. The video keeps playing while sync runs in the background.
 - **Persistent cache** — extracted audio and retimed subtitles live in a configurable cache directory and survive across mpv sessions. Same media + sub pair is re-synced from cache in milliseconds.
@@ -30,7 +31,7 @@ Automatic subtitle synchronization for [mpv](https://mpv.io/) — match misalign
   ```bash
   pip install ffsubsync          # recommended — better accuracy
   ```
-  `alass` — [build from source](https://github.com/kaegi/alass), or `trizen -S alass-git` on Arch.
+  `alass` — [build from source](https://github.com/kaegi/alass), or `yay -S alass-git` on Arch.
 
 ### Install
 

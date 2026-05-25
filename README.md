@@ -1,140 +1,127 @@
-# autosubsync-mpv
+# mpvsubsync
 
-Automatic subtitle synchronization script for [mpv](https://wiki.archlinux.org/index.php/Mpv).
+Automatic subtitle synchronization for [mpv](https://mpv.io/) — match misaligned subtitles to audio using [`ffsubsync`](https://github.com/smacke/ffsubsync) or [`alass`](https://github.com/kaegi/alass).
 
-A demo can be viewed on <a target="_blank" href="https://www.youtube.com/watch?v=w1vwnUiF6Bc"><img src="https://user-images.githubusercontent.com/69171671/115097010-4bd13c80-9f17-11eb-83e9-2583658f73bc.png" width="80px"></a>
+> Forked from [`joaquintorres/autosubsync-mpv`](https://github.com/joaquintorres/autosubsync-mpv) with substantial rework: async job manager, persistent cache, ASS progress bar, centered OSD menu, hardened parsers, and Windows/macOS support.
 
-Supported backends:
-* [ffsubsync](https://github.com/smacke/ffsubsync)
-* [alass](https://github.com/kaegi/alass)
+---
+
+## Features
+
+- **Two backends** — [ffsubsync](https://github.com/smacke/ffsubsync) (more accurate) or [alass](https://github.com/kaegi/alass) (faster). Pick per-mode, or be asked each time.
+- **Async job manager** — non-blocking subprocess execution with stop, restart, and reset controls. The video keeps playing while sync runs in the background.
+- **Persistent cache** — extracted audio and retimed subtitles live in a configurable cache directory and survive across mpv sessions. Same media + sub pair is re-synced from cache in milliseconds.
+- **ASS progress bar** — determinate fill for audio extraction, animated indeterminate bar for retiming, with elapsed time and percentage badge. Renders centered over the video.
+- **Auto-centered OSD menu** — semi-transparent backdrop, sizes to its content, readable over any video.
+- **Fault-tolerant parsers** — handles non-standard SRT (mixed separators, optional spaces, trailing data) and malformed ASS entries without crashing.
+- **Cross-platform** — Linux, macOS, Windows. Auto-discovers executables in PATH and common install locations.
+- **Clean track list** — retimed sub loads as a track titled `retimed`. Reset removes it and switches back to your original. The original sub file on disk is never touched unless you explicitly save.
+- **First-run config** — writes a default `script-opts/mpvsubsync.conf` the first time the script loads so the options are visible and editable.
+
+---
 
 ## Installation
 
-0. Make sure you have mpv v0.33 or higher installed.
-    ```
-    $ mpv --version
-    ```
-1. Install [FFmpeg](https://wiki.archlinux.org/index.php/FFmpeg):
-    ```
-    $ pacman -S ffmpeg
-    ```
-    Windows users have to manually install FFmpeg from [here](https://ffmpeg.zeranoe.com/builds/).
-2. Install your retiming program of choice,
-[ffsubsync](https://github.com/smacke/ffsubsync), [alass](https://github.com/kaegi/alass) or both:
-    ```
-    $ pip install ffsubsync
-    ```
-    ```
-    $ trizen -S alass-git # for Arch-based distros
-    ```
+### Prerequisites
 
-3. Download the add-on and save it to your mpv scripts folder.
+- **mpv** ≥ 0.33
+- **FFmpeg** in `PATH`
+- One retiming backend (or both):
+  ```bash
+  pip install ffsubsync          # recommended — better accuracy
+  ```
+  `alass` — [build from source](https://github.com/kaegi/alass), or `trizen -S alass-git` on Arch.
 
-    | GNU/Linux | Windows |
-    |---|---|
-    | `~/.config/mpv/scripts` | `%AppData%\mpv\scripts\` |
+### Install
 
-    To do it in one command:
-
-    ```
-    $ git clone 'https://github.com/Ajatt-Tools/autosubsync-mpv' ~/.config/mpv/scripts/autosubsync
-    ```
-
-## Configuration
-
-You can skip this step if the add-on works out of the box.
-
-Create a config file:
-
-| GNU/Linux | Windows |
-|---|---|
-| `~/.config/mpv/script-opts/autosubsync.conf` | `%AppData%\mpv\script-opts\autosubsync.conf` |
-
-Example config:
-
-```
-# Absolute paths to the executables, if needed:
-
-# 1. ffmpeg
-ffmpeg_path=C:/Program Files/ffmpeg/bin/ffmpeg.exe
-ffmpeg_path=/usr/bin/ffmpeg
-
-# 2. ffsubsync
-ffsubsync_path=C:/Program Files/ffsubsync/ffsubsync.exe
-ffsubsync_path=/home/user/.local/bin/ffsubsync
-
-# 3. alass
-alass_path=C:/Program Files/ffmpeg/bin/alass.exe
-alass_path=/usr/bin/alass
-
-# Preferred retiming tool. Allowed options: 'ffsubsync', 'alass', 'ask'.
-# If set to 'ask', the add-on will ask to choose the tool every time:
-
-# 1. Preferred tool for syncing to audio.
-audio_subsync_tool=ask
-audio_subsync_tool=ffsubsync
-audio_subsync_tool=alass
-
-# 2. Preferred tool for syncing to another subtitle.
-altsub_subsync_tool=ask
-altsub_subsync_tool=ffsubsync
-altsub_subsync_tool=alass
-
-# Unload old subs (yes,no)
-# After retiming, tell mpv to forget the original subtitle track.
-unload_old_sub=yes
-unload_old_sub=no
-
-# Overwrite the original subtitle file.
-# Replace the old subtitle file with the retimed file.
-overwrite_old_sub=yes
-overwrite_old_sub=no
-
-# Directory to write the new subtitle file to.
-# If set to empty, the directory of the original subtitle will be used.
-new_sub_directory=
-new_sub_directory=~~/retimed-subtitles
+```bash
+git clone https://github.com/fahimscirex/mpvsubsync ~/.config/mpv/scripts/mpvsubsync
 ```
 
-## Notes
+| OS            | Scripts directory          |
+| ------------- | -------------------------- |
+| Linux / macOS | `~/.config/mpv/scripts/`   |
+| Windows       | `%APPDATA%\mpv\scripts\`   |
 
-* On Windows, you need to use forward slashes or double backslashes for your path.
-For example, `"C:\\Users\\YourPath\\Scripts\\ffsubsync"`
-or `"C:/Users/YourPath/Scripts/ffsubsync"`,
-or it might not work.
-
-* On GNU/Linux you can use `which ffsubsync` to find out where it is.
+---
 
 ## Usage
 
-When you have an out of sync sub, press `n` to synchronize it.
+| Shortcut   | Action                |
+| ---------- | --------------------- |
+| `n`        | Open the mpvsubsync menu |
+| `Ctrl + r` | Reset / cancel        |
 
-`ffsubsync` can typically take up to about 20-30 seconds
-to synchronize (I've seen it take as much as 2 minutes
-with a very large file on a lower end computer), so it
-would probably be faster to find another, properly
-synchronized subtitle with `autosub` or `trueautosub`.
-Many times this is just not possible, as all available
-subs for your specific language are out of sync.
+You can also trigger reset from `input.conf` or another script:
+```
+script-message mpvsubsync-reset
+```
 
-Take into account that using this script has the
-same limitations as `ffsubsync`, so subtitles that have
-a lot of extra text or are meant for an entirely different
-version of the video might not sync properly. `alass` is supposed
-to handle some edge cases better, but I haven't fully tested it yet,
-obtaining similar results with both.
+### Menu navigation
 
-Note that the script will create a new subtitle file, in the same folder
-as the original, with the `_retimed` suffix at the end.
+| Key                              | Action          |
+| -------------------------------- | --------------- |
+| `j` / `k`, `↑` / `↓`, scroll     | Move selection  |
+| `l`, `Enter`, left-click         | Confirm         |
+| `h`, `ESC`, right-click, `n`     | Close           |
 
-## Issues and feedback
+### Menu options
 
-If you are having trouble getting it to work or you've found a bug,
-feel free to [join our community](https://tatsumoto-ren.github.io/blog/join-our-community.html) to ask directly.
+| Option                         | Description |
+| ------------------------------ | ----------- |
+| **Sync to audio**              | Retime the active sub against the audio track. Extracted audio is cached. |
+| **Sync to another subtitle**   | Retime the active sub against a different loaded sub track (no audio extraction). |
+| **Stop current sync**          | Cancel the running job. Visible only while a sync is in progress. |
+| **Restart last sync**          | Re-run the previous sync. Wipes its cache first so the engine actually re-runs. |
+| **Reset current sync/cache**   | Stop any running job. Remove the retimed sub from mpv's track list, switch back to the original, and delete the cached audio + retimed sub from disk. The original sub file is never deleted. |
+| **Save current timings**       | Persist the current sub (retimed result and/or manual `z`/`x` delay shift) over the original file on disk. The original is preserved as `<name>.bak.<ext>` on the first save. |
+| **Cancel**                     | Close the menu. |
 
-Try to check if
-[ffsubsync](https://github.com/smacke/ffsubsync)
-or
-[alass](https://github.com/kaegi/alass)
-works properly outside of `mpv` first.
-If the retiming tool of choice isn't working, `autosubsync` will likely fail.
+---
+
+## Configuration
+
+The script writes a default config to `~/.config/mpv/script-opts/mpvsubsync.conf` on first load. Edit it directly, or delete it to regenerate.
+
+```ini
+# --- Backends (leave empty to auto-discover in PATH) ---
+# ffmpeg_path=
+# ffsubsync_path=
+# alass_path=
+
+# Preferred tool per mode: ffsubsync, alass, or ask
+audio_subsync_tool=ask
+altsub_subsync_tool=ask
+
+# --- Caching ---
+cache_enabled=yes
+cache_dir=~/.cache/mpvsubsync/         # Linux/macOS default
+# cache_dir=%LOCALAPPDATA%/mpvsubsync/cache/   # Windows default
+
+# --- Performance ---
+fast_stream_mode=no         # disable for best accuracy; enable for faster streaming
+fast_stream_percent=30      # % of stream duration to extract in fast mode
+
+# --- Debug ---
+debug_logging=no
+```
+
+> On Windows, paths must use `/` or `\\`, e.g. `C:/Program Files/ffmpeg/bin/ffmpeg.exe`.
+
+---
+
+## How it works
+
+1. Resolves the subtitle source: external file, internal track (extracted via ffmpeg), or remote stream.
+2. Extracts the reference audio (`reference-<hash>.wav` in the cache dir; reused on subsequent runs against the same media).
+3. Runs the chosen backend to produce the retimed sub (`retimed-<hash>.srt` in the cache dir).
+4. Loads the retimed sub into mpv as a track titled `retimed`. Your original sub stays loaded alongside it.
+5. The retimed sub stays as a cache file — it never lands next to your source sub on disk. Use **Save current timings** if you want to commit the result over the original (with a `.bak` backup).
+
+---
+
+## Credits
+
+- Original project: [joaquintorres/autosubsync-mpv](https://github.com/joaquintorres/autosubsync-mpv)
+- Earlier upstream maintainers: Ren Tatsumoto, nairyosangha, dyphire, and other contributors listed in the git history
+- Sync engines: [ffsubsync](https://github.com/smacke/ffsubsync), [alass](https://github.com/kaegi/alass)

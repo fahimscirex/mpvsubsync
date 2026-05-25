@@ -25,7 +25,11 @@ function TimeStamp:toSeconds()
 end
 
 function TimeStamp:adjustTime(seconds)
-    return self.toTimeStamp(self:toSeconds() + seconds)
+    local new_seconds = self:toSeconds() + seconds
+    if new_seconds < 0 then
+        new_seconds = 0
+    end
+    return self.toTimeStamp(new_seconds)
 end
 
 function TimeStamp:toString(decimal_symbol)
@@ -45,11 +49,20 @@ function AbstractSubtitle:create()
     return setmetatable(new, AbstractSubtitle_mt)
 end
 
+local function fail_parse(message)
+    return nil, message
+end
+
 function AbstractSubtitle:save()
     print(string.format("Writing '%s' to file..", self.filename))
-    local f = io.open(self.filename, 'w')
+    local f, err = io.open(self.filename, 'w')
+    if not f then
+        print(string.format("Error opening file for writing: %s", tostring(err)))
+        return false, err
+    end
     f:write(self:toString())
     f:close()
+    return true
 end
 
 -- strip Byte Order Mark from file, if it's present
@@ -72,12 +85,19 @@ end
 
 function AbstractSubtitle:parse_file(filename)
     local lines = {}
-    for line in io.lines(filename) do
-        if #lines == 0 then line = self:sanitize(line) end
-        line = line:gsub('\r\n?', '') -- make sure there's no carriage return
-        line = trim(line)
-        table.insert(lines, line)
+    local f, err = io.open(filename, 'r')
+    if not f then
+        print(string.format("Error opening file %s for reading: %s", filename, tostring(err)))
+        return lines
     end
+    for line in f:lines() do
+        local clean_line = line
+        if #lines == 0 then clean_line = self:sanitize(clean_line) end
+        clean_line = clean_line:gsub('\r\n?', '') -- make sure there's no carriage return
+        clean_line = trim(clean_line)
+        table.insert(lines, clean_line)
+    end
+    f:close()
     return lines
 end
 
@@ -121,7 +141,7 @@ function SRT.entry()
 end
 
 function SRT:populate(filename)
-    local timestamp_fmt = "^(%d+):(%d+):(%d+),(%d+) %-%-> (%d+):(%d+):(%d+),(%d+)$"
+    local timestamp_fmt = "^(%d+):(%d+):(%d+)[,%.](%d+)%s*%-%->%s*(%d+):(%d+):(%d+)[,%.](%d+)"
     local function parse_timestamp(timestamp)
         local function to_seconds(seconds, milliseconds)
             return tonumber(string.format("%s.%s", seconds, milliseconds))
@@ -135,10 +155,14 @@ function SRT:populate(filename)
     local f_idx, idx = 1, 1
     for _, line in pairs(self:parse_file(filename)) do
         if idx == 1 and #line > 0 then
-            assert(line:match("^%d+$"), string.format("SRT FORMAT ERROR (line %d): expected a number but got '%s'", f_idx, line))
+            if not line:match("^%d+$") then
+                return fail_parse(string.format("SRT format error on line %d: expected a number but got '%s'", f_idx, line))
+            end
             entry.index = line
         elseif idx == 2 then
-            assert(line:match("^%d+:%d+:%d+,%d+ %-%-> %d+:%d+:%d+,%d+$"), string.format("SRT FORMAT ERROR (line %d): expected a timecode string but got '%s'", f_idx, line))
+            if not line:match("^%d+:%d+:%d+[,%.]%d+%s*%-%->%s*%d+:%d+:%d+[,%.]%d+") then
+                return fail_parse(string.format("SRT format error on line %d: expected a timecode string but got '%s'", f_idx, line))
+            end
             local t_start, t_end = parse_timestamp(line)
             entry.start_time, entry.end_time = t_start, t_end
         else
@@ -155,6 +179,9 @@ function SRT:populate(filename)
         end
         idx = idx + 1
         f_idx = f_idx + 1
+    end
+    if entry.index ~= nil then
+        table.insert(new.entries, entry)
     end
     return new
 end
@@ -222,7 +249,9 @@ function ASS:populate(filename, language)
                 parser(line)
             end
         else
-            parser(line)
+            if parser ~= nil then
+                parser(line)
+            end
         end
     end
     -- create subtitle instance
@@ -241,14 +270,20 @@ function ASS:populate(filename, language)
         for i = 1, #header_columns - 1 do
             local col = header_columns[i]
             local idx = string.find(ev_values, ",", last_idx + 1)
-            local val = ev_values:sub(last_idx + 1, idx - 1)
+            local val
+            if idx then
+                val = ev_values:sub(last_idx + 1, idx - 1)
+                last_idx = idx
+            else
+                val = ev_values:sub(last_idx + 1)
+                last_idx = #ev_values
+            end
             local timestamp_entry_column = self.header_mapper[col]
             if timestamp_entry_column then
                 new_event[timestamp_entry_column] = create_timestamp(val)
             else
                 new_event[col] = val
             end
-            last_idx = idx
         end
         new_event[header_columns[#header_columns]] = ev_values:sub(last_idx + 1)
         return new_event
@@ -258,7 +293,14 @@ function ASS:populate(filename, language)
     sub.header = table.concat(header, "\n")
     sub.language = language
     -- remove and process first entry in events, which is a header
-    local _, _, colstring = string.find(table.remove(events, 1), "^%a+:%s(.+)$")
+    local events_header = table.remove(events, 1)
+    if events_header == nil then
+        return fail_parse("ASS format error: missing Events header")
+    end
+    local _, _, colstring = string.find(events_header, "^%a+:%s(.+)$")
+    if colstring == nil then
+        return fail_parse("ASS format error: invalid Events header")
+    end
     local columns = {};
     for i in colstring:gmatch("[^%,%s]+") do table.insert(columns, i) end
     sub.event_header = columns
